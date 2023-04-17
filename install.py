@@ -17,7 +17,7 @@ wget("https://raw.githubusercontent.com/jczic/MicroWebSrv/master/www/index.html"
 wget("https://raw.githubusercontent.com/jczic/MicroWebSrv/master/www/test.pyhtml","www/test.pyhtml")
 
 #Install the running files
-if not 'log' in os.listdir(): os.mkdir("/log")
+if not 'logs' in os.listdir(): os.mkdir("/logs")
 wget("https://raw.githubusercontent.com/RattyDAVE/micropython-crypto/master/boot.py","boot.py")
 wget("https://raw.githubusercontent.com/RattyDAVE/micropython-crypto/master/main.py","main.py")
 wget("https://raw.githubusercontent.com/RattyDAVE/micropython-crypto/master/functions.py","functions.py")
