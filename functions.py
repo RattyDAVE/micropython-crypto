@@ -91,15 +91,15 @@ def graphit(data,title,days):
     fbuf=framebuf.FrameBuffer(bytearray(height*width*bits),width,height, framebuf.MONO_HLSB)
 
     for x in range(len(data)):
-        p_h=abs(int((height/(maxvalue-minvalue))*(data[x]-minvalue)))
-        p_w=abs(int((width/len(data))*x))
+        #p_h=abs(int((height/(maxvalue-minvalue))*(data[x]-minvalue)))
+        #p_w=abs(int((width/len(data))*x))
         
         # (height / (maxvalue-minvalue)) * value
-        #p_h=int((height/(maxvalue-minvalue))*(data[x]-minvalue))
-        #p_h=abs(p_h-height)
+        p_h=int((height/(maxvalue-minvalue))*(data[x]-minvalue))
+        p_h=abs(p_h-height)
 
-        #p_w=int((width/len(data))*x)
-        #p_w=abs(p_w)
+        p_w=int((width/len(data))*x)
+        p_w=abs(p_w)
     
         if not x==0: fbuf.line(p_wFrom,p_hFrom,p_w,p_h,1)
     
@@ -173,8 +173,6 @@ def graphit(data,title,days):
     #    write_chunk(f, b'IHDR', ihdr_data)
     #    write_chunk(f, b'IDAT', uzlib.compress(data))
     #    write_chunk(f, b'IEND', b'')
-
-
     
     return
 
@@ -195,10 +193,10 @@ def startwww():
 def db_connect():
     import upymysql
     config=dict()
-    config['db_host']="192.168.0.7"
-    config['db_user']="root"
-    config['db_password']="my-secret-pw"
-    config['db_db']="testlog1"   
+    config['db_host']="192.168.0.xxx"
+    config['db_user']="xxxx"
+    config['db_password']="xxxx"
+    config['db_db']="xxxxx"   
     
     connection = upymysql.connect(host=config['db_host'],
                                  user=config['db_user'],
