@@ -93,6 +93,13 @@ def graphit(data,title,days):
     for x in range(len(data)):
         p_h=abs(int((height/(maxvalue-minvalue))*(data[x]-minvalue)))
         p_w=abs(int((width/len(data))*x))
+        
+        # (height / (maxvalue-minvalue)) * value
+        #p_h=int((height/(maxvalue-minvalue))*(data[x]-minvalue))
+        #p_h=abs(p_h-height)
+
+        #p_w=int((width/len(data))*x)
+        #p_w=abs(p_w)
     
         if not x==0: fbuf.line(p_wFrom,p_hFrom,p_w,p_h,1)
     
