@@ -171,6 +171,19 @@ def graphit(data,title,days):
     
     return
 
+
+#Webserver
+def startwww():
+    from microWebSrv import MicroWebSrv
+    global svr
+    srv = MicroWebSrv(webPath='www/')
+    #srv.Start() 
+    srv.Start(threaded=True)
+    #to stop srv.Stop()
+    
+
+
+
 #Database
 def db_connect():
     import upymysql
