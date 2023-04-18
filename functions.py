@@ -77,6 +77,15 @@ def file_exist(filename):
         #print("DEBUG file_exist - File "+filename+" NOT FOUND")
         return False
 
+def file_csv(filename)
+    r[]
+    with open(filename,'r') as file:
+	    for line in file:
+		    line=line.rstrip('\n')
+		    line=line.rstrip('\r')
+		    r.append(line.split(','))
+    return r
+
 #Graphics
 def graphit(data,title,days):
     import framebuf
