@@ -3,7 +3,6 @@ import os
 def wget(url, filename):
     from urequests import get
     r = get(url)
-    print(r.content)
     with open(filename, 'wb') as f:
         f.write(r.content)
  
