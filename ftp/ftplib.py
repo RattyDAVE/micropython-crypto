@@ -32,11 +32,15 @@ Example::
 # Modified by Phil Schwartz to add storbinary and storlines callbacks.
 # Modified by Giampaolo Rodola' to add TLS support.
 # Modified, stripped down and cleaned up by Christopher Arndt for MicroPython
+# Modified by Pablo Zinemanas to work on pycom boards (tested in WiPy).
 
 try:
-    import socket as _socket
-except ImportError:
     import usocket as _socket
+except ImportError:
+    import socket as _socket
+
+import ssl
+import time
 
 __all__ = (
     "Error",
@@ -104,50 +108,41 @@ def _resolve_addr(addr):
     else:
         host = addr[0]
 
-    return _socket.getaddrinfo(host, addr[1], family)
+    return _socket.getaddrinfo(host, addr[1])
 
+socket = _socket.socket
 
-if getattr(_socket, 'SocketType', None):
-    socket = _socket.socket
-else:
-    class socket:
-        """Compatibility wrapper."""
-        def __init__(self, *args, **kw):
-            if args and isinstance(args[0], _socket.socket):
-                self._sock = args[0]
-            else:
-                self._sock = _socket.socket(*args, **kw)
+#if getattr(_socket, 'SocketType', None):
+#    socket = _socket.socket
+#else:
+#class socket:
+#    def __init__(self, *args):
+#        if args and isinstance(args[0], _socket.socket):
+#            self._sock = args[0]
+#        else:
+#        self._sock = _socket.socket(*args)
 
-        def accept(self):
-            s, addr = self._sock.accept()
-            return self.__class__(s), addr
+#    def accept(self):
+#        s, addr = self._sock.accept()
+#        return self.__class__(s), addr
 
-        def bind(self, addr):
-            return self._sock.bind(_resolve_addr(addr))
+#    def bind(self, addr):
+#        return self._sock.bind(_resolve_addr(addr))
 
-        def connect(self, addr):
-            return self._sock.connect(_resolve_addr(addr))
+#    def connect(self, addr):
+#        return self._sock.connect(_resolve_addr(addr))
 
-        def recv(self, size):
-            if hasattr(self._sock, 'recv'):
-                return self._sock.recv(size)
-            else:
-                return self._sock.read(size)
+#    def sendall(self, *args):
+#        return self._sock.send(*args)
 
-        def sendall(self, *args):
-            if hasattr(self._sock, 'send'):
-                return self._sock.send(*args)
-            else:
-                return self._sock.write(*args)
+ #   def __getattr__(self, name):
+ #       return getattr(self._sock, name)
 
-        def __getattr__(self, name):
-            return getattr(self._sock, name)
+#    def __enter__(self):
+#        return self._sock
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            self._sock.close()
+#    def __exit__(self, *args):
+#        self._sock.close()
 
 
 # The main class itself
@@ -231,27 +226,55 @@ class FTP:
                 if self.sock is not None:
                     self.close()
 
-    def _create_connection(self, addr, timeout=None, source_address=None):
-        sock = socket()
-        addrinfos = _resolve_addr(addr)
-        for af, _, _, _, addr in addrinfos:
+    def _create_connection(self, addr, timeout=None, source_address=None, use_ssl=False):
+        #addrinfos = _resolve_addr(addr)
+        #af = addrinfos[0][0]
+        #self.af = af
+
+        sock = None
+        for sock_i in _resolve_addr(addr):
+            af, _, proto, _, sa = sock_i
             try:
-                sock.connect(addr)
-            except Exception as exc:
-                if self.debugging:
-                    print(exc)
-            else:
-                if timeout and timeout is not _GLOBAL_DEFAULT_TIMEOUT:
-                    sock.settimeout(timeout)
-                try:
-                    sock.family = af
-                except:
-                    pass
-                return sock
-        else:
+                sock = socket(af, _socket.SOCK_STREAM, proto)
+                break
+            except:
+                if sock:
+                    sock.close()
+                continue
+        if not sock:
             raise Error("Could not connect to %r" % (addr,))
 
-    def connect(self, host=None, port=None, timeout=None, source_address=None):
+        #sock = socket()
+
+        if use_ssl:
+            sock = ssl.wrap_socket(sock)
+        
+        self.af = af
+     
+        if timeout and timeout is not _GLOBAL_DEFAULT_TIMEOUT:
+            sock.settimeout(timeout)
+
+        sock.connect(sa)
+        return sock
+
+ #       for af, _, _, _, addr in addrinfos:
+ #           try:
+ #               sock.connect(addr)
+ #           except Exception as exc:
+ #               if self.debugging:
+ #                   print(exc)
+ #           else:
+ #               if timeout and timeout is not _GLOBAL_DEFAULT_TIMEOUT:
+ #                   sock.settimeout(timeout)
+ #               try:
+ #                   sock.family = af
+ #               except:
+ #                   pass
+ #               return sock
+ #       else:
+ #           raise Error("Could not connect to %r" % (addr,))
+
+    def connect(self, host=None, port=None, timeout=None, source_address=None, use_ssl=False):
         """Connect to host.
 
         Arguments are:
@@ -272,8 +295,8 @@ class FTP:
             source_address = self.source_address
 
         self.sock = self._create_connection((self.host, self.port), timeout,
-                                            source_address)
-        self.af = self.sock.family
+                                            source_address,use_ssl=use_ssl)
+
         self.file = self.sock.makefile('rb')
         self.welcome = self.getresp()
         return self.welcome
@@ -297,7 +320,6 @@ class FTP:
         2: also print raw lines read and sent before stripping CR/LF
         """
         self.debugging = level
-
     debug = set_debuglevel
 
     def set_pasv(self, val=True):
@@ -320,6 +342,7 @@ class FTP:
         line = line + CRLF
         if self.debugging > 1:
             print('*put*', self.sanitize(line))
+ 
         self.sock.sendall(line.encode(self.encoding))
 
     # Internal: send one command to the server (through putline())
@@ -332,14 +355,20 @@ class FTP:
     # Internal: return one line from the server, stripping CRLF.
     # Raise EOFError if the connection is closed
     def getline(self):
-        line = self.file.readline(self.maxline + 1).decode()
-        if len(line) > self.maxline:
-            raise Error("got more than %d bytes" % self.maxline)
-        if self.debugging > 1:
-            print('*get*', self.sanitize(line))
-        if not line:
-            raise EOFError
-        return line.rstrip('\r\n')
+        while(1):
+            line = self.file.readline(self.maxline + 1)#.decode()
+            if line is not None:
+                line = line.decode()
+
+                if len(line) > self.maxline:
+                    raise Error("got more than %d bytes" % self.maxline)
+                if self.debugging > 1:
+                    print('*get*', self.sanitize(line))
+                if not line:
+                    raise EOFError
+                
+                return line.rstrip('\r\n')
+
 
     # Internal: get a response from the server, which may possibly
     # consist of multiple lines.  Return a single string with no
@@ -351,7 +380,7 @@ class FTP:
             code = line[:3]
             while 1:
                 nextline = self.getline()
-                line = line + (b'\n' + nextline)
+                line = line + ('\n' + nextline)
                 if nextline[:3] == code and \
                         nextline[3:4] != '-':
                     break
@@ -378,7 +407,8 @@ class FTP:
     def voidresp(self):
         """Expect a response beginning with '2'."""
         resp = self.getresp()
-        if not resp.startswith('2'):
+        #if not resp.startswith('2'):
+        if resp[0] != '2':
             raise error_reply(resp)
         return resp
 
@@ -399,7 +429,7 @@ class FTP:
         resp = self.getmultiline()
 
         if resp[:3] not in {'426', '225', '226'}:
-            raise error_proto("Unexpected ABOR response: %r" % resp)
+            raise error_proto(resp)
 
         return resp
 
@@ -449,7 +479,7 @@ class FTP:
             host = "127.0.0.1" if self.af == _socket.AF_INET else "::1"
 
         for port in range(MIN_PORT, MAX_PORT):
-            addrinfo = _socket.getaddrinfo(host, port, self.af)
+            addrinfo = _socket.getaddrinfo(host, port)
 
             for af, socktype, proto, _, addr in addrinfo:
                 if af == self.af and socktype == _socket.SOCK_STREAM:
@@ -530,7 +560,7 @@ class FTP:
         if self.passiveserver:
             host, port = self.makepasv()
             conn = self._create_connection((host, port), self.timeout,
-                                           self.source_address)
+                                           self.source_address, use_ssl=False)
             try:
                 if rest is not None:
                     self.sendcmd("REST %s" % rest)
@@ -574,7 +604,6 @@ class FTP:
         if resp.startswith('150'):
             # this is conditional in case we received a 125
             size = parse150(resp)
-
         return conn, size
 
     def transfercmd(self, cmd, rest=None):
@@ -630,17 +659,20 @@ class FTP:
           The response code.
         """
         self.voidcmd('TYPE I')
-        with self.transfercmd(cmd, rest) as conn:
-            while 1:
-                data = conn.recv(blocksize)
-                if not data:
-                    break
-                callback(data)
+        #with self.transfercmd(cmd, rest) as conn:
+        conn = self.transfercmd(cmd, rest)
+        #fp = conn.makefile('rb')
+        while True:
+            data = conn.recv(blocksize)#fp.readline(blocksize) #conn.readline(blocksize)#
+
+            if not data:
+                break
+            callback(data)
 
             # shutdown ssl layer
-            if _SSLSocket is not None and isinstance(conn, _SSLSocket):
-                conn.unwrap()
-
+          #  if _SSLSocket is not None and isinstance(conn, _SSLSocket):
+          #      conn.unwrap()
+        conn.close()
         return self.voidresp()
 
     def retrlines(self, cmd, callback=None):
@@ -660,38 +692,70 @@ class FTP:
         if callback is None:
             callback = print
 
-        self.sendcmd('TYPE A')
+        self.sendcmd('TYPE A')#self.sendcmd('TYPE A')
 
-        with self.transfercmd(cmd) as conn:
-            if hasattr(conn, 'makefile'):
-                fp = conn.makefile('rb')
-            else:
-                fp = conn._sock
+        conn = self.transfercmd(cmd)
+        conn.settimeout(150)
+        #fp = conn.makefile('rb')
+        #conn.close()
 
-            while 1:
-                line = fp.readline(self.maxline + 1).decode()
+        #line = conn.readline(self.maxline + 1).decode()
+        #print('line',line)
+        #with conn.makefile('rb') as fp:
+        while True:
+            line = conn.readline(self.maxline + 1).decode() #readline
 
-                if not line:
-                    break
+            if not line:
+                break
 
-                if len(line) > self.maxline:
-                    raise Error("got more than %d bytes" % self.maxline)
+            if len(line) > self.maxline:
+                #conn.close()
+                raise Error("got more than %d bytes" % self.maxline)
 
-                if self.debugging > 2:
-                    print('*retr*', repr(line))
+            if self.debugging > 2:
+                print('*retr*', repr(line))
 
-                if line[-2:] == CRLF:
-                    line = line[:-2]
-                elif line[-1:] == '\n':
-                    line = line[:-1]
+            if line[-2:] == CRLF:
+                line = line[:-2]
+            elif line[-1:] == '\n':
+                line = line[:-1]
 
-                callback(line)
+            #callback(line)
 
-            # shutdown ssl layer
-            if _SSLSocket is not None and isinstance(conn, _SSLSocket):
-                conn.unwrap()
+        conn.close()
 
-            fp.close()
+
+                # shutdown ssl layer
+                #if _SSLSocket is not None and isinstance(conn, _SSLSocket):
+                #    conn.unwrap()
+
+
+ #       with self.transfercmd(cmd) as conn:
+ #           with conn.makefile('rb') as fp:
+ #               while 1:
+ #                   print('make file')
+ #                   line = conn.readline(self.maxline + 1).decode()
+  #                  print('line',line)
+
+  #                  if not line:
+  #                      break
+
+  #                  if len(line) > self.maxline:
+  #                      raise Error("got more than %d bytes" % self.maxline)
+
+   #                 if self.debugging > 2:
+   #                     print('*retr*', repr(line))
+
+    #                if line[-2:] == CRLF:
+     #                   line = line[:-2]
+     #               elif line[-1:] == '\n':
+     #                   line = line[:-1]
+
+      #              callback(line)
+
+                # shutdown ssl layer
+                #if _SSLSocket is not None and isinstance(conn, _SSLSocket):
+                #    conn.unwrap()
 
         return self.voidresp()
 
@@ -713,20 +777,21 @@ class FTP:
           The response code.
         """
         self.voidcmd('TYPE I')
-        with self.transfercmd(cmd, rest) as conn:
-            while 1:
-                buf = fp.read(blocksize)
-                if not buf:
-                    break
-
-                conn.sendall(buf)
-                if callback:
-                    callback(buf)
+        conn = self.transfercmd(cmd, rest)
+        #with self.transfercmd(cmd, rest) as conn:
+        while 1:
+            buf = fp.read(blocksize)
+            if not buf:
+                break
+            conn.sendall(buf)
+            
+            if callback:
+                callback(buf)
 
             # shutdown ssl layer
-            if _SSLSocket is not None and isinstance(conn, _SSLSocket):
-                conn.unwrap()
-
+          #  if _SSLSocket is not None and isinstance(conn, _SSLSocket):
+          #      conn.unwrap()
+        conn.close()  
         return self.voidresp()
 
     def storlines(self, cmd, fp, callback=None):
@@ -744,24 +809,27 @@ class FTP:
           The response code.
         """
         self.voidcmd('TYPE A')
-        with self.transfercmd(cmd) as conn:
-            while 1:
-                buf = fp.readline(self.maxline + 1)
-                if len(buf) > self.maxline:
-                    raise Error("got more than %d bytes" % self.maxline)
-                if not buf:
-                    break
-                if buf[-2:] != B_CRLF:
-                    if buf[-1] in B_CRLF:
-                        buf = buf[:-1]
-                    buf = buf + B_CRLF
-                conn.sendall(buf)
-                if callback:
-                    callback(buf)
+        conn = self.transfercmd(cmd)
+      #  with self.transfercmd(cmd) as conn:
+        while 1:
+            buf = fp.readline(self.maxline + 1).decode()
+            if len(buf) > self.maxline:
+                conn.close()
+                raise Error("got more than %d bytes" % self.maxline)
+            if not buf:
+                break
+            if buf[-2:] != B_CRLF:
+                if buf[-1] in B_CRLF:
+                    buf = buf[:-1]
+                buf = buf + B_CRLF
+            conn.sendall(buf)
+            if callback:
+                callback(buf)
             # shutdown ssl layer
-            if _SSLSocket is not None and isinstance(conn, _SSLSocket):
-                conn.unwrap()
+           # if _SSLSocket is not None and isinstance(conn, _SSLSocket):
+           #     conn.unwrap()
 
+        conn.close()
         return self.voidresp()
 
     def acct(self, password):
@@ -1004,3 +1072,4 @@ def parse257(resp):
         dirname = dirname + c
 
     return dirname
+
