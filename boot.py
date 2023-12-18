@@ -1,12 +1,9 @@
 def do_connect():
     
     
-    SSID="Gyros"
-    SSID_Password="Toenails2Eyeballs!"
-    
-    #SSID="Gyros2"
-    #SSID_Password="Toenails2Eyeballs"
-    
+    SSID="CHANGE ME"
+    SSID_Password="CHANGE THIS TOO"
+  
     import time
     import network
     import ntptime
