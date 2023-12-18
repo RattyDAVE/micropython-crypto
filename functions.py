@@ -1,8 +1,9 @@
-from urequests import get
-import umachine
-import ujson
+from requests import get
+import machine
+import json
 import framebuf
 import time
+import os
 
 def config_save(config, config_file):
     with open(config_file, 'w') as f:
@@ -11,7 +12,7 @@ def config_save(config, config_file):
 def config_load(config_file):
     try:
         with open(config_file, 'r') as f:
-            config = ujson.loads(f.read())
+            config = json.loads(f.read())
 
     except OSError: #Create Defaults and Save Config File if not exist
         config={'currency': 'GBP','headers': {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}}
@@ -21,25 +22,18 @@ def config_load(config_file):
         config['quantity']['pluton']=0
         config['quantity']['matic-network']=0
         config['quantity']['the-sandbox']=0
-
-        #config['coinlist']=""
-        #for i in config['quantity']: config['coinlist']+=","+i if config['coinlist'] else ","+i
-        
-        #config['geckourl'] = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=" + config['currency'] + "&ids=" + config['coinlist']
-
         config_save(config,config_file)
+
     return config
 
 def getgecko(config):
-    
-    for i in config['quantity']: coinlist+=i if coinlist else ","+i
-    full_url="https://api.coingecko.com/api/v3/coins/markets?vs_currency=" + config['currency'] + "&ids=" +coinlist]
-
-    #return get(config['geckourl'], headers=config['headers']).json()
+    coinlist=""
+    for i in config['quantity']: coinlist+=","+i if coinlist else ","+i
+    full_url="https://api.coingecko.com/api/v3/coins/markets?vs_currency=" + config['currency'] + "&ids=" +coinlist
     return get(full_url, headers=config['headers']).json()
 
 def timestamp():
-    return "%02d:%02d"%(umachine.RTC().datetime()[4:6])
+    return "%02d:%02d"%(machine.RTC().datetime()[4:6])
 
 def pc_diff(old_value, new_value):
     return ((new_value - old_value) / old_value) * 100
@@ -47,8 +41,7 @@ def pc_diff(old_value, new_value):
 def file_append(filename, ap_text):
     with open(filename, 'a') as myfile:
         myfile.write(ap_text+'\n')
-
-
+        
 def graphwallet_file(filename,title,time_period,epd):
     #import framebuf
     
@@ -171,10 +164,13 @@ def graphwallet_dir(logdir,title,time_period,epd):
     minXvalue, minYvalue = 0, 0
     first_value = 0
     
-    file filename = [f for f in os.listdir(logdir) if os.path.isfile(f)]
+    files = [f for f in os.listdir(logdir)]
+    files = sorted(files)
+    print(files)
 
     for filename in files:
-        with open(filename,'r') as file:
+        with open(logdir+"/"+filename,'r') as file:
+            #print("Opening: "+filename)
             for line in file:
                 values = line.strip().split(",")
                 values[0] = int(values[0])
@@ -197,7 +193,8 @@ def graphwallet_dir(logdir,title,time_period,epd):
     else: scaleYval=height/(maxYvalue-minYvalue)
 
     for filename in files:
-        with open(filename,'r') as file:
+        with open(logdir+"/"+filename,'r') as file:
+            #print("Opening: "+filename)
             for line in file:
                 values = line.strip().split(",")
                 values[0] = int(values[0])
@@ -256,7 +253,7 @@ def graphwallet_dir(logdir,title,time_period,epd):
 
     if days <= 1: title="1 Day"
     else: title=str(days)+" days"
-    #epd.imageblack.text(title, int((width/2)-((len(title)*8)/2)), 0, 0x00) #Title at the top centre
+
     epd.imageblack.text(title, int((width/2)-((len(title)*8)/2)), 0, 0x00) #Title at the top centre
 
     time_string=str(timestamp())+"Z"

@@ -1,7 +1,11 @@
 def do_connect():
     
-    SSID="SSID"
-    SSID_Password="SSID_PASSWORD"
+    
+    SSID="Gyros"
+    SSID_Password="Toenails2Eyeballs!"
+    
+    #SSID="Gyros2"
+    #SSID_Password="Toenails2Eyeballs"
     
     import time
     import network
@@ -12,7 +16,7 @@ def do_connect():
     wlan.connect(SSID, SSID_Password)
     while wlan.isconnected() == False:
         print('Waiting for connection...')
-        sleep(1)
+        time.sleep(1)
     print(wlan.ifconfig())
     
     try:
